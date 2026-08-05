@@ -31,7 +31,7 @@ export class PersonalUsageProvider implements UsageProvider {
     const now=new Date(); const days=Math.min(now.getDate(),31); const reports=await Promise.all(Array.from({length:days},async(_,i)=>{const date=new Date(now.getFullYear(),now.getMonth(),i+1);const url=`https://api.github.com/users/${encodeURIComponent(login)}/settings/billing/ai_credit/usage?year=${date.getFullYear()}&month=${date.getMonth()+1}&day=${date.getDate()}`;const r=await fetch(url,{headers});if(!r.ok)throw new Error(`Personal usage report failed for ${date.toISOString().slice(0,10)} (${r.status})`);return {date,json:await r.json() as {usageItems?:unknown}};}));
     return reports.map(({date,json})=>{const items=Array.isArray(json.usageItems)?json.usageItems:[];const credits=items.reduce((sum,item)=>sum+(typeof item==='object'&&item!==null?Number((item as {grossQuantity?:unknown}).grossQuantity):0),0);return {id:`personal-${date.toISOString().slice(0,10)}`,observedAt:new Date(date.getFullYear(),date.getMonth(),date.getDate(),23,59,59).toISOString(),credits:Number.isFinite(credits)?credits:0,quality:'exact' as const,sourceId:'personal-api'};});
   }
-  async getFreshness(){return {observedAt:new Date().toISOString(),stale:false,explanation:'Direct GitHub personal billing API.'};} dispose(){}
+  async getFreshness(){return {observedAt:new Date().toISOString(),stale:false,explanation:'Direct GitHub personal billing API — this is not the Copilot included-quota meter.'};} dispose(){}
 }
 export class ProviderRegistry {
   constructor(private readonly organization:string, private readonly enterprise:string) {}
