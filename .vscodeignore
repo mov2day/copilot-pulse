@@ -1,0 +1,6 @@
+.github
+src
+test
+*.test.ts
+vitest.config.ts
+copilot-pulse-product-technical-spec.md

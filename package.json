@@ -1,0 +1,50 @@
+{
+  "name": "copilot-pulse",
+  "displayName": "Copilot Pulse",
+  "description": "Calm, local-first GitHub Copilot AI-credit awareness for VS Code.",
+  "version": "0.1.0",
+  "publisher": "MuthuKumarKoodalingam",
+  "license": "MIT",
+  "engines": { "vscode": "^1.96.0" },
+  "categories": ["Other", "Visualization"],
+  "keywords": ["copilot", "usage", "budget", "ai credits", "forecast"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "copilotPulse.openDashboard", "title": "Copilot Pulse: Open Dashboard" },
+      { "command": "copilotPulse.startSession", "title": "Copilot Pulse: Start Focus Session" },
+      { "command": "copilotPulse.endSession", "title": "Copilot Pulse: End Focus Session" },
+      { "command": "copilotPulse.enterSnapshot", "title": "Copilot Pulse: Enter Usage Snapshot" },
+      { "command": "copilotPulse.importReport", "title": "Copilot Pulse: Import Usage Report" },
+      { "command": "copilotPulse.refresh", "title": "Copilot Pulse: Refresh Usage" },
+      { "command": "copilotPulse.enableEconomy", "title": "Copilot Pulse: Enable Economy Mode" },
+      { "command": "copilotPulse.snooze", "title": "Copilot Pulse: Snooze Alerts" },
+      { "command": "copilotPulse.configureBudgets", "title": "Copilot Pulse: Configure Budgets" },
+      { "command": "copilotPulse.explainAlert", "title": "Copilot Pulse: Explain Current Alert" },
+      { "command": "copilotPulse.exportHistory", "title": "Copilot Pulse: Export Local History" },
+      { "command": "copilotPulse.deleteHistory", "title": "Copilot Pulse: Delete Local History" }
+    ],
+    "configuration": {
+      "title": "Copilot Pulse",
+      "properties": {
+        "copilotPulse.enabled": { "type": "boolean", "default": true },
+        "copilotPulse.dataSource": { "type": "string", "enum": ["auto", "manual", "import", "organization-report", "enterprise-report", "enterprise-records"], "default": "auto" },
+        "copilotPulse.budgets.daily": { "type": "number", "minimum": 0, "default": 80 },
+        "copilotPulse.budgets.weekly": { "type": "number", "minimum": 0, "default": 400 },
+        "copilotPulse.budgets.billingCycle": { "type": "number", "minimum": 0, "default": 1500 },
+        "copilotPulse.statusBar.mode": { "type": "string", "enum": ["adaptive", "state", "burnRate", "runway", "budget"], "default": "adaptive" },
+        "copilotPulse.notifications.level": { "type": "string", "enum": ["ambient", "information", "actionable"], "default": "actionable" },
+        "copilotPulse.spike.enabled": { "type": "boolean", "default": true },
+        "copilotPulse.spike.windowMinutes": { "type": "number", "minimum": 5, "default": 30 },
+        "copilotPulse.spike.multiplier": { "type": "number", "minimum": 1, "default": 2.5 },
+        "copilotPulse.spike.minimumCredits": { "type": "number", "minimum": 1, "default": 10 },
+        "copilotPulse.storage.retentionDays": { "type": "number", "enum": [30, 90, 180, 365, 0], "default": 180 },
+        "copilotPulse.workspaceAware": { "type": "boolean", "default": false },
+        "copilotPulse.telemetry.enabled": { "type": "boolean", "default": false }
+      }
+    }
+  },
+  "scripts": { "compile": "tsc -p .", "watch": "tsc -w -p .", "test": "vitest run", "lint": "tsc --noEmit", "package": "npm run compile && npx @vscode/vsce package --no-dependencies" },
+  "devDependencies": { "@types/node": "^22.10.1", "@types/vscode": "^1.96.0", "@vscode/vsce": "^3.2.1", "typescript": "^5.7.2", "vitest": "^2.1.8" }
+}

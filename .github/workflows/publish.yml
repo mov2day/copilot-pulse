@@ -1,0 +1,19 @@
+name: Publish VS Code extension
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run package
+      - name: Publish to VS Code Marketplace
+        run: npx @vscode/vsce publish --packagePath *.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
