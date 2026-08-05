@@ -5,10 +5,12 @@ type QuotaRecord={entitlement?:unknown;remaining?:unknown;percent_remaining?:unk
 type InternalCopilotResponse={token?:unknown;copilot_plan?:unknown;quota_reset_date?:unknown;quota_reset_date_utc?:unknown;quota_snapshots?:Record<string,QuotaRecord>};
 export class CopilotQuotaProvider implements UsageProvider {
   readonly id='copilot-quota'; readonly quality:DataQuality='exact';
-  constructor(private readonly log:(message:string)=>void=()=>{}) {}
+  constructor(private readonly log:(message:string)=>void=()=>{}, private readonly interactive=false) {}
   async getAllowance():Promise<AllowanceSnapshot|undefined>{
     this.log('Quota refresh: looking for an existing VS Code GitHub session.');
-    const session=await vscode.authentication.getSession('github',[],{createIfNone:false});
+    const session=this.interactive
+      ?await vscode.authentication.getSession('github',['read:user'],{createIfNone:true})
+      :await vscode.authentication.getSession('github',['read:user'],{createIfNone:false});
     if(!session){this.log('No GitHub session is available to Copilot Pulse.');throw new Error('Sign in to GitHub in VS Code, then refresh Copilot Pulse.');}
     this.log('GitHub session found. Starting Copilot token exchange.');
     const headers={Authorization:`Bearer ${session.accessToken}`,Accept:'application/json','Editor-Version':`vscode/${vscode.version}`,'Editor-Plugin-Version':'copilot-chat/0.60.0','Copilot-Integration-Id':'vscode-chat','User-Agent':'GitHubCopilotChat/0.60.0','X-GitHub-Api-Version':'2025-04-01'};
