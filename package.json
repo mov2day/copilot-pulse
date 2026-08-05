@@ -19,6 +19,7 @@
       { "command": "copilotPulse.enterSnapshot", "title": "Copilot Pulse: Enter Usage Snapshot" },
       { "command": "copilotPulse.importReport", "title": "Copilot Pulse: Import Usage Report" },
       { "command": "copilotPulse.refresh", "title": "Copilot Pulse: Refresh Usage" },
+      { "command": "copilotPulse.connectPersonalApi", "title": "Copilot Pulse: Connect Personal Usage API" },
       { "command": "copilotPulse.enableEconomy", "title": "Copilot Pulse: Enable Economy Mode" },
       { "command": "copilotPulse.snooze", "title": "Copilot Pulse: Snooze Alerts" },
       { "command": "copilotPulse.configureBudgets", "title": "Copilot Pulse: Configure Budgets" },
@@ -30,7 +31,7 @@
       "title": "Copilot Pulse",
       "properties": {
         "copilotPulse.enabled": { "type": "boolean", "default": true },
-        "copilotPulse.dataSource": { "type": "string", "enum": ["auto", "manual", "import", "organization-report", "enterprise-report", "enterprise-records"], "default": "auto" },
+        "copilotPulse.dataSource": { "type": "string", "enum": ["auto", "personal-api", "manual", "import", "organization-report", "enterprise-report", "enterprise-records"], "default": "auto" },
         "copilotPulse.budgets.daily": { "type": "number", "minimum": 0, "default": 80 },
         "copilotPulse.budgets.weekly": { "type": "number", "minimum": 0, "default": 400 },
         "copilotPulse.budgets.billingCycle": { "type": "number", "minimum": 0, "default": 1500 },

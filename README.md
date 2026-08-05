@@ -38,6 +38,14 @@ provider is refreshed. Provider results are marked **Delayed** for daily reports
 or **Exact** for the eligible enterprise-records preview path. Permission failures,
 schema errors, and stale values remain visible in the dashboard diagnostics.
 
+### Personal accounts: direct AI-credit API
+
+For an individual plan, use **Copilot Pulse: Connect Personal Usage API** once.
+Create a GitHub fine-grained personal access token with **Plan: Read** user
+permission, then paste it into the prompt. Copilot Pulse stores it solely in VS
+Code Secret Storage and uses GitHub's supported personal AI-credit endpoint to
+load the current month's daily usage. No manual snapshots are required.
+
 ## Included controls
 
 Focus sessions can be paused/resumed, extended, annotated, ended, and reviewed
