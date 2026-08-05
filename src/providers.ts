@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { AllowanceSnapshot, DataQuality, Freshness, UsageSample } from './domain';
 export interface UsageProvider { readonly id: string; readonly quality: DataQuality; getAllowance(): Promise<AllowanceSnapshot|undefined>; getUsage(): Promise<UsageSample[]>; getFreshness(): Promise<Freshness>; dispose(): void; }
-type QuotaRecord={entitlement?:unknown;remaining?:unknown;percent_remaining?:unknown;unlimited?:unknown};
+type QuotaRecord={entitlement?:unknown;remaining?:unknown;quota_remaining?:unknown;percent_remaining?:unknown;unlimited?:unknown};
 type InternalCopilotResponse={token?:unknown;copilot_plan?:unknown;quota_reset_date?:unknown;quota_reset_date_utc?:unknown;quota_snapshots?:Record<string,QuotaRecord>};
 export class CopilotQuotaProvider implements UsageProvider {
   readonly id='copilot-quota'; readonly quality:DataQuality='exact';
@@ -17,11 +17,11 @@ export class CopilotQuotaProvider implements UsageProvider {
     const exchange=await fetch('https://api.github.com/copilot_internal/v2/token',{headers});
     let lastStatus=exchange.status;
     this.log(`Token exchange returned HTTP ${exchange.status}.`);
-    if(exchange.ok){const exchangeData=await exchange.json() as InternalCopilotResponse;this.log(`Token exchange payload keys: ${Object.keys(exchangeData).filter(key=>key!=='token').join(', ')||'(none)'}; short-lived token: ${typeof exchangeData.token==='string'?'present':'absent'}.`);const direct=quotaFrom(exchangeData);if(direct){this.log('Quota snapshot was present in the token exchange response.');return direct;}const copilotToken=typeof exchangeData.token==='string'?exchangeData.token:undefined;
-      if(copilotToken){this.log('Requesting Copilot user quota with the exchanged token.');const user=await fetch('https://api.github.com/copilot_internal/user',{headers:{...headers,Authorization:`Bearer ${copilotToken}`}});lastStatus=user.status;this.log(`Exchanged-token quota request returned HTTP ${user.status}.`);if(user.ok){const userData=await user.json() as InternalCopilotResponse;this.log(`Quota response keys: ${Object.keys(userData).join(', ')||'(none)'}.`);const quota=quotaFrom(userData);if(quota){this.log(`Quota parsed: ${quota.unlimited?'unlimited':`${quota.consumed ?? 0}/${quota.amount}`} (${quota.plan??'unknown plan'}).`);return quota;}this.log('Quota response did not contain a usable premium_interactions, premium, or chat snapshot.');}}
+    if(exchange.ok){const exchangeData=await exchange.json() as InternalCopilotResponse;this.log(`Token exchange payload keys: ${Object.keys(exchangeData).filter(key=>key!=='token').join(', ')||'(none)'}; short-lived token: ${typeof exchangeData.token==='string'?'present':'absent'}.`);const direct=quotaFrom(exchangeData,this.log);if(direct){this.log('Quota snapshot was present in the token exchange response.');return direct;}const copilotToken=typeof exchangeData.token==='string'?exchangeData.token:undefined;
+      if(copilotToken){this.log('Requesting Copilot user quota with the exchanged token.');const user=await fetch('https://api.github.com/copilot_internal/user',{headers:{...headers,Authorization:`Bearer ${copilotToken}`}});lastStatus=user.status;this.log(`Exchanged-token quota request returned HTTP ${user.status}.`);if(user.ok){const userData=await user.json() as InternalCopilotResponse;this.log(`Quota response keys: ${Object.keys(userData).join(', ')||'(none)'}.`);const quota=quotaFrom(userData,this.log);if(quota){this.log(`Quota parsed: ${quota.unlimited?'unlimited':`${quota.consumed ?? 0}/${quota.amount}`} (${quota.plan??'unknown plan'}).`);return quota;}this.log('Quota response did not contain a usable finite quota snapshot.');}}
     }
     this.log('Trying the Copilot user endpoint with the VS Code GitHub session token.');
-    const user=await fetch('https://api.github.com/copilot_internal/user',{headers});lastStatus=user.status;this.log(`Session-token quota request returned HTTP ${user.status}.`);if(user.ok){const userData=await user.json() as InternalCopilotResponse;this.log(`Fallback quota response keys: ${Object.keys(userData).join(', ')||'(none)'}.`);const quota=quotaFrom(userData);if(quota){this.log(`Quota parsed: ${quota.unlimited?'unlimited':`${quota.consumed ?? 0}/${quota.amount}`} (${quota.plan??'unknown plan'}).`);return quota;}}
+    const user=await fetch('https://api.github.com/copilot_internal/user',{headers});lastStatus=user.status;this.log(`Session-token quota request returned HTTP ${user.status}.`);if(user.ok){const userData=await user.json() as InternalCopilotResponse;this.log(`Fallback quota response keys: ${Object.keys(userData).join(', ')||'(none)'}.`);const quota=quotaFrom(userData,this.log);if(quota){this.log(`Quota parsed: ${quota.unlimited?'unlimited':`${quota.consumed ?? 0}/${quota.amount}`} (${quota.plan??'unknown plan'}).`);return quota;}}
     this.log(`Quota refresh stopped. Last HTTP status: ${lastStatus}.`);
     throw new Error(`Copilot quota endpoint did not return a supported quota snapshot (${lastStatus}).`);
   }
@@ -29,14 +29,20 @@ export class CopilotQuotaProvider implements UsageProvider {
   async getFreshness(){return {observedAt:new Date().toISOString(),stale:false,explanation:'Live Copilot quota snapshot from the GitHub Copilot internal API.'};}
   dispose(){}
 }
-function quotaFrom(data:InternalCopilotResponse):AllowanceSnapshot|undefined {
-  const snapshot=data.quota_snapshots?.premium_interactions ?? data.quota_snapshots?.premium ?? data.quota_snapshots?.chat;
-  if(!snapshot)return undefined;
-  const unlimited=snapshot.unlimited===true; const amount=Number(snapshot.entitlement); const remaining=Number(snapshot.remaining); const consumed=Number.isFinite(amount)&&Number.isFinite(remaining)?Math.max(0,amount-remaining):undefined;
-  if(!unlimited&&(!Number.isFinite(amount)||amount<=0))return undefined;
+function quotaFrom(data:InternalCopilotResponse,log:(message:string)=>void=()=>{}):AllowanceSnapshot|undefined {
+  const snapshots=Object.entries(data.quota_snapshots??{}); if(!snapshots.length)return undefined;
+  log(`Quota snapshots: ${snapshots.map(([name,value])=>`${name}{entitlement=${numberLabel(value.entitlement)}, remaining=${numberLabel(value.remaining)}, quota_remaining=${numberLabel(value.quota_remaining)}, percent_remaining=${numberLabel(value.percent_remaining)}, unlimited=${value.unlimited===true}}`).join('; ')}.`);
+  const ordered=[...snapshots.filter(([name])=>name==='premium_interactions'||name==='ai_credits'||name==='premium'),...snapshots.filter(([name])=>name!=='premium_interactions'&&name!=='ai_credits'&&name!=='premium')];
+  const found=ordered.find(([,snapshot])=>(finite(snapshot.entitlement)??0)>0)||ordered.find(([,snapshot])=>snapshot.unlimited===true); if(!found)return undefined;
+  const [name,snapshot]=found; const unlimited=snapshot.unlimited===true; let amount=finite(snapshot.entitlement); const remaining=finite(snapshot.remaining)??finite(snapshot.quota_remaining); if(!amount&&remaining!==undefined){const percent=finite(snapshot.percent_remaining);if(percent&&percent>0)amount=remaining/(percent/100);}
+  const consumed=amount!==undefined&&remaining!==undefined?Math.max(0,amount-remaining):undefined;
+  if(!unlimited&&(amount===undefined||amount<=0))return undefined;
+  log(`Using quota snapshot '${name}'.`);
   const reset=data.quota_reset_date_utc ?? data.quota_reset_date;
-  return {amount:unlimited?0:amount,consumed,remaining:Number.isFinite(remaining)?remaining:undefined,unlimited,plan:typeof data.copilot_plan==='string'?data.copilot_plan:undefined,resetsAt:typeof reset==='string'?reset:undefined,observedAt:new Date().toISOString(),sourceId:'copilot-quota',quality:'exact'};
+  return {amount:unlimited?0:amount!,consumed,remaining,unlimited,plan:typeof data.copilot_plan==='string'?data.copilot_plan:undefined,resetsAt:typeof reset==='string'?reset:undefined,observedAt:new Date().toISOString(),sourceId:'copilot-quota',quality:'exact'};
 }
+function finite(value:unknown){const n=Number(value);return Number.isFinite(n)?n:undefined;}
+function numberLabel(value:unknown){const n=finite(value);return n===undefined?'—':n.toFixed(3).replace(/\.000$/,'');}
 export class ImportedProvider implements UsageProvider { readonly id='import'; readonly quality: DataQuality='imported'; constructor(private readonly samples: UsageSample[]) {} async getAllowance(){ return undefined; } async getUsage(){ return this.samples; } async getFreshness(){const last=this.samples.at(-1)?.observedAt; return {observedAt:last,stale:!last || Date.now()-new Date(last).getTime()>48*3600000,explanation:'Imported report'};} dispose(){} }
 export async function parseReport(uri: vscode.Uri): Promise<UsageSample[]> { const raw=Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8').trim(); if (uri.path.endsWith('.csv')) return csv(raw).map((x,i)=>normalize(x,i)); const parsed = uri.path.endsWith('.ndjson') ? raw.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) : JSON.parse(raw); const rows: unknown[] = Array.isArray(parsed) ? parsed : parsed.samples ?? []; return rows.map((x,i) => normalize(x as Record<string,unknown>,i)); }
 function csv(raw:string) { const [head,...lines]=raw.split(/\r?\n/); const cols=head.split(',').map(s=>s.trim()); return lines.filter(Boolean).map(line => Object.fromEntries(cols.map((c,i)=>[c,line.split(',')[i]?.trim()]))); }
