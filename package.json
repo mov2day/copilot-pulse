@@ -31,7 +31,7 @@
       "title": "Copilot Pulse",
       "properties": {
         "copilotPulse.enabled": { "type": "boolean", "default": true },
-        "copilotPulse.dataSource": { "type": "string", "enum": ["auto", "personal-api", "manual", "import", "organization-report", "enterprise-report", "enterprise-records"], "default": "auto" },
+        "copilotPulse.dataSource": { "type": "string", "enum": ["auto", "copilot-quota", "personal-api", "manual", "import", "organization-report", "enterprise-report", "enterprise-records"], "default": "auto", "description": "Auto uses the signed-in VS Code GitHub session to read the live Copilot quota snapshot." },
         "copilotPulse.budgets.daily": { "type": "number", "minimum": 0, "default": 80, "description": "Your personal daily planning target; not a Copilot plan allowance." },
         "copilotPulse.budgets.weekly": { "type": "number", "minimum": 0, "default": 400, "description": "Your personal weekly planning target; not a Copilot plan allowance." },
         "copilotPulse.budgets.billingCycle": { "type": "number", "minimum": 0, "default": 1500, "description": "Your personal cycle planning target; not a Copilot plan allowance." },

@@ -1,6 +1,30 @@
 import * as vscode from 'vscode';
 import { AllowanceSnapshot, DataQuality, Freshness, UsageSample } from './domain';
 export interface UsageProvider { readonly id: string; readonly quality: DataQuality; getAllowance(): Promise<AllowanceSnapshot|undefined>; getUsage(): Promise<UsageSample[]>; getFreshness(): Promise<Freshness>; dispose(): void; }
+type QuotaRecord={entitlement?:unknown;remaining?:unknown;percent_remaining?:unknown;unlimited?:unknown};
+type InternalCopilotResponse={copilot_plan?:unknown;quota_reset_date?:unknown;quota_reset_date_utc?:unknown;quota_snapshots?:Record<string,QuotaRecord>};
+export class CopilotQuotaProvider implements UsageProvider {
+  readonly id='copilot-quota'; readonly quality:DataQuality='exact';
+  async getAllowance():Promise<AllowanceSnapshot|undefined>{
+    const session=await vscode.authentication.getSession('github',[],{createIfNone:false});
+    if(!session) throw new Error('Sign in to GitHub in VS Code, then refresh Copilot Pulse.');
+    const headers={Authorization:`Bearer ${session.accessToken}`,Accept:'application/json','Editor-Version':`vscode/${vscode.version}`,'Editor-Plugin-Version':'copilot-chat/0.60.0','Copilot-Integration-Id':'vscode-chat','User-Agent':'GitHubCopilotChat/0.60.0','X-GitHub-Api-Version':'2025-04-01'};
+    const paths=['/copilot_internal/v2/token','/copilot_internal/user']; let lastStatus=0;
+    for(const path of paths){const response=await fetch(`https://api.github.com${path}`,{headers});lastStatus=response.status;if(!response.ok)continue;const data=await response.json() as InternalCopilotResponse;const quota=quotaFrom(data);if(quota)return quota;}
+    throw new Error(`Copilot quota endpoint did not return a supported quota snapshot (${lastStatus}).`);
+  }
+  async getUsage(){return [];}
+  async getFreshness(){return {observedAt:new Date().toISOString(),stale:false,explanation:'Live Copilot quota snapshot from the GitHub Copilot internal API.'};}
+  dispose(){}
+}
+function quotaFrom(data:InternalCopilotResponse):AllowanceSnapshot|undefined {
+  const snapshot=data.quota_snapshots?.premium_interactions ?? data.quota_snapshots?.premium ?? data.quota_snapshots?.chat;
+  if(!snapshot)return undefined;
+  const unlimited=snapshot.unlimited===true; const amount=Number(snapshot.entitlement); const remaining=Number(snapshot.remaining); const consumed=Number.isFinite(amount)&&Number.isFinite(remaining)?Math.max(0,amount-remaining):undefined;
+  if(!unlimited&&(!Number.isFinite(amount)||amount<=0))return undefined;
+  const reset=data.quota_reset_date_utc ?? data.quota_reset_date;
+  return {amount:unlimited?0:amount,consumed,remaining:Number.isFinite(remaining)?remaining:undefined,unlimited,plan:typeof data.copilot_plan==='string'?data.copilot_plan:undefined,resetsAt:typeof reset==='string'?reset:undefined,observedAt:new Date().toISOString(),sourceId:'copilot-quota',quality:'exact'};
+}
 export class ImportedProvider implements UsageProvider { readonly id='import'; readonly quality: DataQuality='imported'; constructor(private readonly samples: UsageSample[]) {} async getAllowance(){ return undefined; } async getUsage(){ return this.samples; } async getFreshness(){const last=this.samples.at(-1)?.observedAt; return {observedAt:last,stale:!last || Date.now()-new Date(last).getTime()>48*3600000,explanation:'Imported report'};} dispose(){} }
 export async function parseReport(uri: vscode.Uri): Promise<UsageSample[]> { const raw=Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8').trim(); if (uri.path.endsWith('.csv')) return csv(raw).map((x,i)=>normalize(x,i)); const parsed = uri.path.endsWith('.ndjson') ? raw.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) : JSON.parse(raw); const rows: unknown[] = Array.isArray(parsed) ? parsed : parsed.samples ?? []; return rows.map((x,i) => normalize(x as Record<string,unknown>,i)); }
 function csv(raw:string) { const [head,...lines]=raw.split(/\r?\n/); const cols=head.split(',').map(s=>s.trim()); return lines.filter(Boolean).map(line => Object.fromEntries(cols.map((c,i)=>[c,line.split(',')[i]?.trim()]))); }

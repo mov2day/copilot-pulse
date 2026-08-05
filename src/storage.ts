@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { AlertState, CompletedSession, FocusSession, ProviderDiagnostics, UsageSample } from './domain';
-const SAMPLES = 'usage.samples', SESSION = 'focus.session', SESSIONS = 'focus.sessions', ALERTS = 'alert.states', DIAGNOSTICS = 'provider.diagnostics';
+import { AlertState, AllowanceSnapshot, CompletedSession, FocusSession, ProviderDiagnostics, UsageSample } from './domain';
+const SAMPLES = 'usage.samples', SESSION = 'focus.session', SESSIONS = 'focus.sessions', ALERTS = 'alert.states', DIAGNOSTICS = 'provider.diagnostics', QUOTA = 'copilot.quota';
 export class Store {
   constructor(private readonly context: vscode.ExtensionContext) {}
   samples(): UsageSample[] { return this.context.globalState.get<UsageSample[]>(SAMPLES, []); }
@@ -9,11 +9,13 @@ export class Store {
   saveSession(s?: FocusSession) { return this.context.globalState.update(SESSION,s); }
   completedSessions() { return this.context.globalState.get<CompletedSession[]>(SESSIONS, []); }
   async completeSession(session: CompletedSession) { await this.context.globalState.update(SESSIONS,[...this.completedSessions(),session].slice(-200)); await this.saveSession(undefined); }
-  async clear() { await Promise.all([this.context.globalState.update(SAMPLES,undefined),this.context.globalState.update(SESSION,undefined),this.context.globalState.update(SESSIONS,undefined),this.context.globalState.update(ALERTS,undefined),this.context.globalState.update(DIAGNOSTICS,undefined)]); }
+  async clear() { await Promise.all([this.context.globalState.update(SAMPLES,undefined),this.context.globalState.update(SESSION,undefined),this.context.globalState.update(SESSIONS,undefined),this.context.globalState.update(ALERTS,undefined),this.context.globalState.update(DIAGNOSTICS,undefined),this.context.globalState.update(QUOTA,undefined)]); }
   alertState(fingerprint:string) { return this.context.globalState.get<AlertState>(`${ALERTS}.${fingerprint}`); }
   saveAlertState(state:AlertState) { return this.context.globalState.update(`${ALERTS}.${state.fingerprint}`,state); }
   diagnostics() { return this.context.globalState.get<ProviderDiagnostics>(DIAGNOSTICS); }
   saveDiagnostics(d:ProviderDiagnostics) { return this.context.globalState.update(DIAGNOSTICS,d); }
+  quota() { return this.context.globalState.get<AllowanceSnapshot>(QUOTA); }
+  saveQuota(quota?:AllowanceSnapshot) { return this.context.globalState.update(QUOTA,quota); }
   economyUntil() { return this.context.globalState.get<string>('economy.until'); }
   setEconomyUntil(value?:string) { return this.context.globalState.update('economy.until',value); }
   snoozeUntil() { return this.context.globalState.get<number>('snooze.until',0); }
