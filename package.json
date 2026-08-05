@@ -4,6 +4,7 @@
   "description": "Calm, local-first GitHub Copilot AI-credit awareness for VS Code.",
   "version": "0.1.0",
   "publisher": "MuthuKumarKoodalingam",
+  "repository": { "type": "git", "url": "https://github.com/mov2day/copilot-pulse.git" },
   "license": "MIT",
   "engines": { "vscode": "^1.96.0" },
   "categories": ["Other", "Visualization"],
