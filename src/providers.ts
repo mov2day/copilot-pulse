@@ -6,3 +6,13 @@ export async function parseReport(uri: vscode.Uri): Promise<UsageSample[]> { con
 function csv(raw:string) { const [head,...lines]=raw.split(/\r?\n/); const cols=head.split(',').map(s=>s.trim()); return lines.filter(Boolean).map(line => Object.fromEntries(cols.map((c,i)=>[c,line.split(',')[i]?.trim()]))); }
 function normalize(row:Record<string,unknown>, i:number):UsageSample { const observedAt=String(row.observedAt ?? row.timestamp ?? row.date ?? ''); const credits=Number(row.credits ?? row.usage ?? row.amount ?? 0); if (!observedAt || Number.isNaN(Date.parse(observedAt)) || !Number.isFinite(credits) || credits < 0) throw new Error(`Invalid usage row ${i+1}: expected timestamp and non-negative credits`); return {id:String(row.id ?? `import-${observedAt}-${i}`),observedAt,credits,cumulativeCredits:row.cumulativeCredits === undefined ? undefined : Number(row.cumulativeCredits),quality:'imported',sourceId:'import',feature:row.feature ? String(row.feature) : undefined,model:row.model ? String(row.model) : undefined}; }
 export class GitHubReportProvider implements UsageProvider { constructor(readonly id:string, readonly quality:DataQuality, private endpoint:string) {} async getAllowance(){return undefined;} async getUsage(){ const session=await vscode.authentication.getSession('github',['read:org'],{createIfNone:true}); const r=await fetch(this.endpoint,{headers:{Authorization:`Bearer ${session.accessToken}`,Accept:'application/vnd.github+json'}}); if(!r.ok) throw new Error(`GitHub usage report unavailable (${r.status})`); const json=await r.json(); return Array.isArray(json) ? json.map((x,i)=>normalize(x,i)) : []; } async getFreshness(){return {stale:false,explanation:'GitHub provider refresh required'};} dispose(){} }
+export type ProviderKind = 'manual'|'import'|'organization-report'|'enterprise-report'|'enterprise-records';
+export class ProviderRegistry {
+  constructor(private readonly organization:string, private readonly enterprise:string) {}
+  select(kind:string): UsageProvider | undefined {
+    if(kind==='organization-report' && this.organization) return new GitHubReportProvider('organization-report','delayed',`https://api.github.com/orgs/${encodeURIComponent(this.organization)}/copilot/usage`);
+    if(kind==='enterprise-report' && this.enterprise) return new GitHubReportProvider('enterprise-report','delayed',`https://api.github.com/enterprises/${encodeURIComponent(this.enterprise)}/copilot/usage`);
+    if(kind==='enterprise-records' && this.enterprise) return new GitHubReportProvider('enterprise-records','exact',`https://api.github.com/enterprises/${encodeURIComponent(this.enterprise)}/copilot/usage/records`);
+    return undefined;
+  }
+}

@@ -28,3 +28,19 @@ Usage history is stored only in VS Code global storage. Credentials, if a suppor
 - Enterprise usage records adapter (public-preview endpoint; configured only when eligible)
 
 The extension does not claim access to a personal live quota API.
+
+## GitHub report providers
+
+Select `copilotPulse.dataSource` in Settings, then set either
+`copilotPulse.providers.organization` or `copilotPulse.providers.enterprise`.
+Copilot Pulse requests VS Code's GitHub `read:org` session only when a configured
+provider is refreshed. Provider results are marked **Delayed** for daily reports
+or **Exact** for the eligible enterprise-records preview path. Permission failures,
+schema errors, and stale values remain visible in the dashboard diagnostics.
+
+## Included controls
+
+Focus sessions can be paused/resumed, extended, annotated, ended, and reviewed
+in local session history. Alert notifications honor persisted cooldowns and a
+one-hour snooze. Economy Mode is explicitly advisory; it never intercepts prompts,
+reads source files, or blocks GitHub Copilot.
