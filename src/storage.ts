@@ -4,7 +4,7 @@ const SAMPLES = 'usage.samples', SESSION = 'focus.session', SESSIONS = 'focus.se
 export class Store {
   constructor(private readonly context: vscode.ExtensionContext) {}
   samples(): UsageSample[] { return this.context.globalState.get<UsageSample[]>(SAMPLES, []); }
-  async add(samples: UsageSample[]) { const all = [...this.samples(), ...samples].filter(s => s.credits >= 0); const seen = new Set<string>(); const unique = all.filter(s => !seen.has(s.id) && !!seen.add(s.id)); const days = vscode.workspace.getConfiguration('copilotPulse').get<number>('storage.retentionDays',180); const cutoff = days ? Date.now()-days*86400000 : 0; await this.context.globalState.update(SAMPLES, unique.filter(s => new Date(s.observedAt).getTime() >= cutoff)); }
+  async add(samples: UsageSample[]) { const byId=new Map(this.samples().filter(s=>s.credits>=0).map(s=>[s.id,s])); for(const sample of samples){if(sample.credits>=0)byId.set(sample.id,sample);} const days = vscode.workspace.getConfiguration('copilotPulse').get<number>('storage.retentionDays',180); const cutoff = days ? Date.now()-days*86400000 : 0; await this.context.globalState.update(SAMPLES,[...byId.values()].filter(s => new Date(s.observedAt).getTime() >= cutoff).sort((a,b)=>a.observedAt.localeCompare(b.observedAt))); }
   session() { return this.context.globalState.get<FocusSession | undefined>(SESSION); }
   saveSession(s?: FocusSession) { return this.context.globalState.update(SESSION,s); }
   completedSessions() { return this.context.globalState.get<CompletedSession[]>(SESSIONS, []); }
