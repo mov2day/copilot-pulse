@@ -2,15 +2,19 @@ import * as vscode from 'vscode';
 import { AllowanceSnapshot, DataQuality, Freshness, UsageSample } from './domain';
 export interface UsageProvider { readonly id: string; readonly quality: DataQuality; getAllowance(): Promise<AllowanceSnapshot|undefined>; getUsage(): Promise<UsageSample[]>; getFreshness(): Promise<Freshness>; dispose(): void; }
 type QuotaRecord={entitlement?:unknown;remaining?:unknown;percent_remaining?:unknown;unlimited?:unknown};
-type InternalCopilotResponse={copilot_plan?:unknown;quota_reset_date?:unknown;quota_reset_date_utc?:unknown;quota_snapshots?:Record<string,QuotaRecord>};
+type InternalCopilotResponse={token?:unknown;copilot_plan?:unknown;quota_reset_date?:unknown;quota_reset_date_utc?:unknown;quota_snapshots?:Record<string,QuotaRecord>};
 export class CopilotQuotaProvider implements UsageProvider {
   readonly id='copilot-quota'; readonly quality:DataQuality='exact';
   async getAllowance():Promise<AllowanceSnapshot|undefined>{
     const session=await vscode.authentication.getSession('github',[],{createIfNone:false});
     if(!session) throw new Error('Sign in to GitHub in VS Code, then refresh Copilot Pulse.');
     const headers={Authorization:`Bearer ${session.accessToken}`,Accept:'application/json','Editor-Version':`vscode/${vscode.version}`,'Editor-Plugin-Version':'copilot-chat/0.60.0','Copilot-Integration-Id':'vscode-chat','User-Agent':'GitHubCopilotChat/0.60.0','X-GitHub-Api-Version':'2025-04-01'};
-    const paths=['/copilot_internal/v2/token','/copilot_internal/user']; let lastStatus=0;
-    for(const path of paths){const response=await fetch(`https://api.github.com${path}`,{headers});lastStatus=response.status;if(!response.ok)continue;const data=await response.json() as InternalCopilotResponse;const quota=quotaFrom(data);if(quota)return quota;}
+    const exchange=await fetch('https://api.github.com/copilot_internal/v2/token',{headers});
+    let lastStatus=exchange.status;
+    if(exchange.ok){const exchangeData=await exchange.json() as InternalCopilotResponse;const direct=quotaFrom(exchangeData);if(direct)return direct;const copilotToken=typeof exchangeData.token==='string'?exchangeData.token:undefined;
+      if(copilotToken){const user=await fetch('https://api.github.com/copilot_internal/user',{headers:{...headers,Authorization:`Bearer ${copilotToken}`}});lastStatus=user.status;if(user.ok){const quota=quotaFrom(await user.json() as InternalCopilotResponse);if(quota)return quota;}}
+    }
+    const user=await fetch('https://api.github.com/copilot_internal/user',{headers});lastStatus=user.status;if(user.ok){const quota=quotaFrom(await user.json() as InternalCopilotResponse);if(quota)return quota;}
     throw new Error(`Copilot quota endpoint did not return a supported quota snapshot (${lastStatus}).`);
   }
   async getUsage(){return [];}
