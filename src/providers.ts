@@ -5,16 +5,22 @@ type QuotaRecord={entitlement?:unknown;remaining?:unknown;percent_remaining?:unk
 type InternalCopilotResponse={token?:unknown;copilot_plan?:unknown;quota_reset_date?:unknown;quota_reset_date_utc?:unknown;quota_snapshots?:Record<string,QuotaRecord>};
 export class CopilotQuotaProvider implements UsageProvider {
   readonly id='copilot-quota'; readonly quality:DataQuality='exact';
+  constructor(private readonly log:(message:string)=>void=()=>{}) {}
   async getAllowance():Promise<AllowanceSnapshot|undefined>{
+    this.log('Quota refresh: looking for an existing VS Code GitHub session.');
     const session=await vscode.authentication.getSession('github',[],{createIfNone:false});
-    if(!session) throw new Error('Sign in to GitHub in VS Code, then refresh Copilot Pulse.');
+    if(!session){this.log('No GitHub session is available to Copilot Pulse.');throw new Error('Sign in to GitHub in VS Code, then refresh Copilot Pulse.');}
+    this.log('GitHub session found. Starting Copilot token exchange.');
     const headers={Authorization:`Bearer ${session.accessToken}`,Accept:'application/json','Editor-Version':`vscode/${vscode.version}`,'Editor-Plugin-Version':'copilot-chat/0.60.0','Copilot-Integration-Id':'vscode-chat','User-Agent':'GitHubCopilotChat/0.60.0','X-GitHub-Api-Version':'2025-04-01'};
     const exchange=await fetch('https://api.github.com/copilot_internal/v2/token',{headers});
     let lastStatus=exchange.status;
-    if(exchange.ok){const exchangeData=await exchange.json() as InternalCopilotResponse;const direct=quotaFrom(exchangeData);if(direct)return direct;const copilotToken=typeof exchangeData.token==='string'?exchangeData.token:undefined;
-      if(copilotToken){const user=await fetch('https://api.github.com/copilot_internal/user',{headers:{...headers,Authorization:`Bearer ${copilotToken}`}});lastStatus=user.status;if(user.ok){const quota=quotaFrom(await user.json() as InternalCopilotResponse);if(quota)return quota;}}
+    this.log(`Token exchange returned HTTP ${exchange.status}.`);
+    if(exchange.ok){const exchangeData=await exchange.json() as InternalCopilotResponse;this.log(`Token exchange payload keys: ${Object.keys(exchangeData).filter(key=>key!=='token').join(', ')||'(none)'}; short-lived token: ${typeof exchangeData.token==='string'?'present':'absent'}.`);const direct=quotaFrom(exchangeData);if(direct){this.log('Quota snapshot was present in the token exchange response.');return direct;}const copilotToken=typeof exchangeData.token==='string'?exchangeData.token:undefined;
+      if(copilotToken){this.log('Requesting Copilot user quota with the exchanged token.');const user=await fetch('https://api.github.com/copilot_internal/user',{headers:{...headers,Authorization:`Bearer ${copilotToken}`}});lastStatus=user.status;this.log(`Exchanged-token quota request returned HTTP ${user.status}.`);if(user.ok){const userData=await user.json() as InternalCopilotResponse;this.log(`Quota response keys: ${Object.keys(userData).join(', ')||'(none)'}.`);const quota=quotaFrom(userData);if(quota){this.log(`Quota parsed: ${quota.unlimited?'unlimited':`${quota.consumed ?? 0}/${quota.amount}`} (${quota.plan??'unknown plan'}).`);return quota;}this.log('Quota response did not contain a usable premium_interactions, premium, or chat snapshot.');}}
     }
-    const user=await fetch('https://api.github.com/copilot_internal/user',{headers});lastStatus=user.status;if(user.ok){const quota=quotaFrom(await user.json() as InternalCopilotResponse);if(quota)return quota;}
+    this.log('Trying the Copilot user endpoint with the VS Code GitHub session token.');
+    const user=await fetch('https://api.github.com/copilot_internal/user',{headers});lastStatus=user.status;this.log(`Session-token quota request returned HTTP ${user.status}.`);if(user.ok){const userData=await user.json() as InternalCopilotResponse;this.log(`Fallback quota response keys: ${Object.keys(userData).join(', ')||'(none)'}.`);const quota=quotaFrom(userData);if(quota){this.log(`Quota parsed: ${quota.unlimited?'unlimited':`${quota.consumed ?? 0}/${quota.amount}`} (${quota.plan??'unknown plan'}).`);return quota;}}
+    this.log(`Quota refresh stopped. Last HTTP status: ${lastStatus}.`);
     throw new Error(`Copilot quota endpoint did not return a supported quota snapshot (${lastStatus}).`);
   }
   async getUsage(){return [];}
